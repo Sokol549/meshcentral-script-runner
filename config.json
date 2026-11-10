@@ -1,7 +1,7 @@
 {
   "name": "MeshCentral Script Runner",
   "shortName": "scriptrunner",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": "sokol549",
   "description": "Experimental Windows script runner using native MeshCentral file and command channels.",
   "hasAdminPanel": false,

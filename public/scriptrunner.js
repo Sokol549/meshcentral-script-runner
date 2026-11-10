@@ -11,7 +11,7 @@
   var redirect, settled=false, timer;
   return new Promise(function(resolve,reject){
    function fail(s){if(settled)return;settled=true;clearTimeout(timer);try{if(redirect)redirect.Stop();}catch(e){}reject(Error(s));}
-   var protocol=CreateRemoteFiles(function(raw){var m=raw;try{if(typeof m==='string')m=JSON.parse(m);}catch(e){return;}onMessage(m);},function(data){if(onBinary)onBinary(data);});
+   var protocol=CreateRemoteFiles(function(raw){var m=raw;try{if(typeof m==='string')m=JSON.parse(m);}catch(e){return;}onMessage(m);},onBinary?function(data){onBinary(data);}:undefined);
    redirect=CreateAgentRedirect(meshserver,protocol,serverPublicNamePort,authCookie,authRelayCookie,domainUrl);
    redirect.onStateChanged=function(x,state){if(state===3 && !settled){settled=true;clearTimeout(timer);resolve(redirect);}else if(state===0){if(!settled)fail('Файловый канал недоступен');else onMessage({action:'disconnected'});}};
    timer=setTimeout(function(){fail('Таймаут открытия файлового канала');},30000);
@@ -24,7 +24,7 @@
   var seen=false,responseid='scriptrunner-prep-'+id,socket=meshserver.socket;
   function agentReply(event){var m;try{m=JSON.parse(event.data);}catch(e){return;}if(m.responseid!==responseid)return;var value=String(m.result||'');value=value.replace(/powershell\.exe[^\r\n]*/ig,'[команда подготовки]');trace('Ответ на команду подготовки: '+value.slice(-4000));}
   if(socket&&socket.addEventListener)socket.addEventListener('message',agentReply);
-  try{redirect=await openFiles(node,function(m){if(m.action==='disconnected')return rejectResult(Error('Соединение потеряно при подготовке'));if(m.action==='ls'&&Number(m.reqid)===71&&Array.isArray(m.dir)){if(!seen){seen=true;trace('Получен список временной папки от агента.');}if(m.dir.some(function(x){return x.n===marker+'.ok';}))resolveResult();else if(m.dir.some(function(x){return x.n===marker+'.failed';}))rejectResult(Error('Не удалось подготовить защищённую папку или проверить её права'));}});}catch(e){if(socket&&socket.removeEventListener)socket.removeEventListener('message',agentReply);throw e;}
+  try{redirect=await openFiles(node,function(m){if(m.action==='disconnected')return rejectResult(Error('Соединение потеряно при подготовке'));if(Number(m.reqid)===71&&Array.isArray(m.dir)){if(!seen){seen=true;trace('Получен список временной папки от агента.');}if(m.dir.some(function(x){return x.n===marker+'.ok';}))resolveResult();else if(m.dir.some(function(x){return x.n===marker+'.failed';}))rejectResult(Error('Не удалось подготовить защищённую папку или проверить её права'));}});}catch(e){if(socket&&socket.removeEventListener)socket.removeEventListener('message',agentReply);throw e;}
   var timer=setTimeout(function(){rejectResult(Error('Подготовка не подтверждена: '+(seen?'маркер не найден':'нет ответа на запрос списка файлов')));},60000),interval;
   try {
    var prefix=dir.replace(/\//g,'\\')+'\\'+marker;
@@ -52,7 +52,7 @@
  async function waitResult(node,id,deadline){
   var redirect,resolveResult,rejectResult,interval;
   var result=new Promise(function(resolve,reject){resolveResult=resolve;rejectResult=reject;});
-  redirect=await openFiles(node,function(m){if(m.action==='disconnected')return rejectResult(Error('Результат неизвестен: связь потеряна'));if(m.action==='ls'&&Number(m.reqid)===2&&Array.isArray(m.dir)&&m.dir.some(function(x){return x.n==='br_'+id+'.result.json';}))resolveResult();});
+  redirect=await openFiles(node,function(m){if(m.action==='disconnected')return rejectResult(Error('Результат неизвестен: связь потеряна'));if(Number(m.reqid)===2&&Array.isArray(m.dir)&&m.dir.some(function(x){return x.n==='br_'+id+'.result.json';}))resolveResult();});
   function query(){if(Date.now()>deadline)return rejectResult(Error('Результат неизвестен: время ожидания истекло; процесс может продолжаться'));redirect.sendText(JSON.stringify({action:'ls',reqid:2,path:'C:/Windows/System32/config/systemprofile/AppData/Local/Temp/BulkScriptRunner'}));}
   try{query();interval=setInterval(query,2000);await result;}finally{clearInterval(interval);redirect.Stop();}
   var root='C:/Windows/System32/config/systemprofile/AppData/Local/Temp/BulkScriptRunner/br_'+id,info=JSON.parse(await download(node,root+'.result.json'));
